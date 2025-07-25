@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}Scarico Merce - Gestionale Magazzino Spezie{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10 col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="bi bi-arrow-up-circle text-warning"></i> Scarico Merce</h4>
+            </div>
+            <div class="card-body">
+                {% if errore %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i> {{ errore }}
+                </div>
+                {% endif %}
+
+                <form method="POST" id="form-scarico">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="prodotto" class="form-label">
+                                    <i class="bi bi-box"></i> Prodotto *
+                                </label>
+                                <select class="form-select" id="prodotto" name="prodotto" required onchange="updateLottiScarico()">
+                                    <option value="">Seleziona prodotto</option>
+                                    {% for nome_prodotto, prodotto in prodotti.items() %}
+                                    {% set totale_disponibile = prodotto.lotti.values() | map(attribute='quantita') | sum %}
+                                    {% if totale_disponibile > 0 %}
+                                    <option value="{{ nome_prodotto }}" 
+                                            {% if request.args.get('prodotto') == nome_prodotto %}selected{% endif %}>
+                                        {{ nome_prodotto }} ({{ totale_disponibile }} {{ prodotto.unita_misura }} disponibili)
+                                    </option>
+                                    {% endif %}
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Solo prodotti con scorte disponibili</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="lotto" class="form-label">
+                                    <i class="bi bi-tag"></i> Lotto *
+                                </label>
+                                <select class="form-select" id="lotto" name="lotto" required onchange="updateQuantitaDisponibile()">
+                                    <option value="">Seleziona prima un prodotto</option>
+                                </select>
+                                <div class="form-text" id="lotto-info">Lotti disponibili per il prodotto selezionato</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quantita" class="form-label">
+                                    <i class="bi bi-123"></i> Quantità *
+                                </label>
+                                <input type="number" step="0.01" min="0.01" class="form-control" 
+                                       id="quantita" name="quantita" placeholder="0.00" required 
+                                       onchange="checkQuantita()">
+                                <div class="form-text" id="quantita-info">Inserisci la quantità da scaricare</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    <i class="bi bi-info-circle"></i> Disponibilità Lotto
+                                </label>
+                                <div class="card bg-light">
+                                    <div class="card-body p-2">
+                                        <div id="disponibilita-display" class="text-muted">
+                                            Seleziona un lotto per vedere la disponibilità
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="note" class="form-label">
+                            <i class="bi bi-sticky"></i> Note (opzionale)
+                        </label>
+                        <textarea class="form-control" id="note" name="note" rows="3" 
+                                  placeholder="Motivo dello scarico, destinazione, ecc..."></textarea>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Indietro
+                        </a>
+                        <button type="submit" class="btn btn-warning" id="btn-scarico" disabled>
+                            <i class="bi bi-check"></i> Registra Scarico
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabella lotti disponibili -->
+<div class="row mt-4" id="lotti-disponibili" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-list"></i> Lotti Disponibili per il Prodotto Selezionato</h5>
+            </div>
+            <div class="card-body">
+                <div id="tabella-lotti">
+                    <!-- Popolato dinamicamente via JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Suggerimenti FIFO -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5><i class="bi bi-exclamation-triangle"></i> Principio FIFO (First In, First Out)</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Raccomandazioni:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-1-circle text-primary"></i> Usa prima i lotti più vecchi</li>
+                            <li><i class="bi bi-2-circle text-primary"></i> Controlla le date di scadenza</li>
+                            <li><i class="bi bi-3-circle text-primary"></i> Evita sprechi per scadenza</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Controlli Automatici:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-shield-check text-success"></i> Verifica disponibilità</li>
+                            <li><i class="bi bi-shield-check text-success"></i> Controllo quantità massima</li>
+                            <li><i class="bi bi-shield-check text-success"></i> Tracciabilità movimenti</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let lottiData = {};
+
+function updateLottiScarico() {
+    const prodotto = document.getElementById('prodotto').value;
+    const lottoSelect = document.getElementById('lotto');
+    const lottiContainer = document.getElementById('lotti-disponibili');
+    const tabellaLotti = document.getElementById('tabella-lotti');
+    
+    // Reset
+    lottoSelect.innerHTML = '<option value="">Seleziona lotto</option>';
+    document.getElementById('disponibilita-display').textContent = 'Seleziona un lotto per vedere la disponibilità';
+    document.getElementById('btn-scarico').disabled = true;
+    
+    if (prodotto) {
+        fetch(`/api/lotti/${encodeURIComponent(prodotto)}`)
+            .then(response => response.json())
+            .then(lotti => {
+                lottiData = lotti;
+                
+                // Filtra solo lotti con quantità > 0 e ordina per data di scadenza (FIFO)
+                const lottiDisponibili = Object.entries(lotti)
+                    .filter(([codice, lotto]) => lotto.quantita > 0)
+                    .sort((a, b) => new Date(a[1].data_scadenza) - new Date(b[1].data_scadenza));
+                
+                if (lottiDisponibili.length > 0) {
+                    // Popola select lotti
+                    lottiDisponibili.forEach(([codiceLotto, lotto]) => {
+                        const option = document.createElement('option');
+                        option.value = codiceLotto;
+                        
+                        // Calcola stato scadenza
+                        const oggi = new Date();
+                        const scadenza = new Date(lotto.data_scadenza);
+                        const giorni = Math.ceil((scadenza - oggi) / (1000 * 60 * 60 * 24));
+                        
+                        let statoScadenza = '';
+                        if (giorni < 0) {
+                            statoScadenza = ' ⚠️ SCADUTO';
+                        } else if (giorni <= 30) {
+                            statoScadenza = ` ⚠️ ${giorni}gg`;
+                        }
+                        
+                        const selectedOption = document.querySelector('#prodotto option:checked');
+                        const unita = selectedOption.textContent.match(/\(([^)]+) ([^)]+)\)/)[2];
+                        
+                        option.textContent = `${codiceLotto} - ${lotto.quantita} ${unita} - Scad: ${lotto.data_scadenza}${statoScadenza}`;
+                        lottoSelect.appendChild(option);
+                    });
+                    
+                    // Mostra tabella riassuntiva
+                    let html = '<div class="table-responsive"><table class="table table-sm">';
+                    html += '<thead><tr><th>Lotto</th><th>Quantità</th><th>Data Scadenza</th><th>Stato</th><th>Azione</th></tr></thead><tbody>';
+                    
+                    lottiDisponibili.forEach(([codiceLotto, lotto]) => {
+                        const oggi = new Date();
+                        const scadenza = new Date(lotto.data_scadenza);
+                        const giorni = Math.ceil((scadenza - oggi) / (1000 * 60 * 60 * 24));
+                        
+                        let badgeClass = 'success';
+                        let statoTesto = 'Valido';
+                        if (giorni < 0) {
+                            badgeClass = 'danger';
+                            statoTesto = 'SCADUTO';
+                        } else if (giorni <= 30) {
+                            badgeClass = 'warning';
+                            statoTesto = `${giorni} giorni`;
+                        }
+                        
+                        const selectedOption = document.querySelector('#prodotto option:checked');
+                        const unita = selectedOption.textContent.match(/\(([^)]+) ([^)]+)\)/)[2];
+                        
+                        html += `<tr class="${giorni <= 7 ? 'table-warning' : ''}">
+                            <td><span class="font-monospace">${codiceLotto}</span></td>
+                            <td><span class="badge bg-primary">${lotto.quantita} ${unita}</span></td>
+                            <td>${lotto.data_scadenza}</td>
+                            <td><span class="badge bg-${badgeClass}">${statoTesto}</span></td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-warning" 
+                                        onclick="selectLotto('${codiceLotto}')">
+                                    <i class="bi bi-arrow-up"></i> Scarica
+                                </button>
+                            </td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    
+                    // Aggiungi nota FIFO
+                    html += '<div class="alert alert-info mt-3"><i class="bi bi-info-circle"></i> ' +
+                           '<strong>FIFO:</strong> I lotti sono ordinati per data di scadenza. ' +
+                           'Si consiglia di scaricare prima i lotti in scadenza (evidenziati in giallo).</div>';
+                    
+                    tabellaLotti.innerHTML = html;
+                    lottiContainer.style.display = 'block';
+                } else {
+                    lottiContainer.style.display = 'none';
+                }
+            });
+    } else {
+        lottiContainer.style.display = 'none';
+    }
+}
+
+function selectLotto(codiceLotto) {
+    document.getElementById('lotto').value = codiceLotto;
+    updateQuantitaDisponibile();
+}
+
+function updateQuantitaDisponibile() {
+    const lotto = document.getElementById('lotto').value;
+    const disponibilitaDisplay = document.getElementById('disponibilita-display');
+    const quantitaInput = document.getElementById('quantita');
+    
+    if (lotto && lottiData[lotto]) {
+        const lottoData = lottiData[lotto];
+        const selectedOption = document.querySelector('#prodotto option:checked');
+        const unita = selectedOption.textContent.match(/\(([^)]+) ([^)]+)\)/)[2];
+        
+        const oggi = new Date();
+        const scadenza = new Date(lottoData.data_scadenza);
+        const giorni = Math.ceil((scadenza - oggi) / (1000 * 60 * 60 * 24));
+        
+        let statoScadenza = '';
+        let alertClass = 'text-success';
+        if (giorni < 0) {
+            statoScadenza = ' (SCADUTO)';
+            alertClass = 'text-danger';
+        } else if (giorni <= 30) {
+            statoScadenza = ` (scade tra ${giorni} giorni)`;
+            alertClass = 'text-warning';
+        }
+        
+        disponibilitaDisplay.innerHTML = `
+            <strong>Lotto:</strong> ${lotto}<br>
+            <strong>Disponibile:</strong> <span class="text-primary">${lottoData.quantita} ${unita}</span><br>
+            <strong>Scadenza:</strong> <span class="${alertClass}">${lottoData.data_scadenza}${statoScadenza}</span>
+        `;
+        
+        quantitaInput.max = lottoData.quantita;
+        quantitaInput.placeholder = `Max: ${lottoData.quantita}`;
+        document.getElementById('quantita-info').textContent = `Massimo disponibile: ${lottoData.quantita} ${unita}`;
+        
+        checkQuantita();
+    }
+}
+
+function checkQuantita() {
+    const lotto = document.getElementById('lotto').value;
+    const quantita = parseFloat(document.getElementById('quantita').value) || 0;
+    const btnScarico = document.getElementById('btn-scarico');
+    
+    if (lotto && lottiData[lotto] && quantita > 0 && quantita <= lottiData[lotto].quantita) {
+        btnScarico.disabled = false;
+        btnScarico.className = 'btn btn-warning';
+    } else {
+        btnScarico.disabled = true;
+        btnScarico.className = 'btn btn-secondary';
+    }
+}
+
+// Inizializzazione
+document.addEventListener('DOMContentLoaded', function() {
+    // Se c'è un prodotto preselezionato, aggiorna i lotti
+    if (document.getElementById('prodotto').value) {
+        updateLottiScarico();
+    }
+});
+</script>
+{% endblock %}
