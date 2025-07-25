@@ -2,6 +2,10 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for
 from datetime import datetime
 import json
 import os
+import webbrowser
+import threading
+import time
+import sys
 
 app = Flask(__name__)
 
@@ -149,5 +153,52 @@ def elimina_prodotto(prodotto):
         save_data(data)
     return redirect(url_for('index'))
 
+def open_browser():
+    """Apre il browser automaticamente dopo un breve ritardo"""
+    time.sleep(1.5)  # Attende che il server si avvii
+    try:
+        webbrowser.open('http://localhost:5000')
+    except:
+        pass  # Se non riesce ad aprire il browser, continua comunque
+
+def is_port_in_use(port):
+    """Verifica se una porta è già in uso"""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Determina se siamo in un eseguibile PyInstaller
+    if getattr(sys, 'frozen', False):
+        # Siamo in un eseguibile
+        debug_mode = False
+        # Avvia il browser automaticamente
+        threading.Thread(target=open_browser, daemon=True).start()
+        
+        print("🚀 Gestionale Magazzino Spezie avviato!")
+        print("📱 Il browser si aprirà automaticamente...")
+        print("🌐 Se il browser non si apre, vai manualmente su: http://localhost:5000")
+        print("❌ Per chiudere il programma, chiudi questa finestra")
+        print("-" * 60)
+    else:
+        # Siamo in modalità sviluppo
+        debug_mode = True
+        print("🔧 Modalità sviluppo attiva")
+    
+    # Verifica che la porta non sia già in uso
+    port = 5000
+    if is_port_in_use(port):
+        print(f"⚠️  Porta {port} già in uso. Prova a chiudere altre istanze del programma.")
+        if getattr(sys, 'frozen', False):
+            input("Premi INVIO per uscire...")
+            sys.exit(1)
+    
+    try:
+        app.run(debug=debug_mode, host='127.0.0.1', port=port, use_reloader=False)
+    except KeyboardInterrupt:
+        print("\n👋 Gestionale Magazzino Spezie chiuso")
+    except Exception as e:
+        print(f"❌ Errore: {e}")
+        if getattr(sys, 'frozen', False):
+            input("Premi INVIO per uscire...")
+            sys.exit(1)

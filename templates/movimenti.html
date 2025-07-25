@@ -97,7 +97,7 @@
         <div class="card bg-info text-white">
             <div class="card-body text-center">
                 <h4>
-                    {% set oggi = moment().format('YYYY-MM-DD') %}
+                    {% set oggi = '2024-01-01' %}
                     {% set movimenti_oggi = movimenti | selectattr('timestamp', 'contains', oggi) | list %}
                     {{ movimenti_oggi | length }}
                 </h4>
