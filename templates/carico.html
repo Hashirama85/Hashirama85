@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Carico Merce - Gestionale Magazzino Spezie{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10 col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="bi bi-arrow-down-circle text-success"></i> Carico Merce</h4>
+            </div>
+            <div class="card-body">
+                {% if errore %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i> {{ errore }}
+                </div>
+                {% endif %}
+
+                <form method="POST" id="form-carico">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="prodotto" class="form-label">
+                                    <i class="bi bi-box"></i> Prodotto *
+                                </label>
+                                <select class="form-select" id="prodotto" name="prodotto" required onchange="updateLotti()">
+                                    <option value="">Seleziona prodotto</option>
+                                    {% for nome_prodotto, prodotto in prodotti.items() %}
+                                    <option value="{{ nome_prodotto }}" 
+                                            {% if request.args.get('prodotto') == nome_prodotto %}selected{% endif %}>
+                                        {{ nome_prodotto }} ({{ prodotto.unita_misura }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="lotto" class="form-label">
+                                    <i class="bi bi-tag"></i> Codice Lotto *
+                                </label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="lotto" name="lotto" 
+                                           placeholder="Es: LOT001, 2024-001..." required>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="generateLotto()">
+                                        <i class="bi bi-magic"></i> Auto
+                                    </button>
+                                </div>
+                                <div class="form-text">Inserisci o genera automaticamente il codice lotto</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quantita" class="form-label">
+                                    <i class="bi bi-123"></i> Quantità *
+                                </label>
+                                <input type="number" step="0.01" min="0.01" class="form-control" 
+                                       id="quantita" name="quantita" placeholder="0.00" required>
+                                <div class="form-text" id="unita-display">Inserisci la quantità</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="data_scadenza" class="form-label">
+                                    <i class="bi bi-calendar"></i> Data Scadenza *
+                                </label>
+                                <input type="date" class="form-control" id="data_scadenza" name="data_scadenza" required>
+                                <div class="form-text">Data di scadenza del lotto</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="note" class="form-label">
+                            <i class="bi bi-sticky"></i> Note (opzionale)
+                        </label>
+                        <textarea class="form-control" id="note" name="note" rows="3" 
+                                  placeholder="Note aggiuntive sul carico..."></textarea>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Indietro
+                        </a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check"></i> Registra Carico
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lotti esistenti -->
+<div class="row mt-4" id="lotti-esistenti" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-list"></i> Lotti Esistenti per il Prodotto Selezionato</h5>
+            </div>
+            <div class="card-body">
+                <div id="lista-lotti">
+                    <!-- Popolato dinamicamente via JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Suggerimenti -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-lightbulb"></i> Suggerimenti per il Carico</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6>Codici Lotto:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check text-success"></i> LOT001, LOT002...</li>
+                            <li><i class="bi bi-check text-success"></i> 2024-001, 2024-002...</li>
+                            <li><i class="bi bi-check text-success"></i> PEPE-240115</li>
+                            <li><i class="bi bi-check text-success"></i> Usa il pulsante "Auto"</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Quantità:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-info text-primary"></i> Usa decimali se necessario</li>
+                            <li><i class="bi bi-info text-primary"></i> Es: 2.5 kg, 150 g</li>
+                            <li><i class="bi bi-info text-primary"></i> Controlla l'unità di misura</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Date di Scadenza:</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-calendar text-warning"></i> Sempre obbligatoria</li>
+                            <li><i class="bi bi-calendar text-warning"></i> Controlla etichetta prodotto</li>
+                            <li><i class="bi bi-calendar text-warning"></i> FIFO: First In, First Out</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateLotti() {
+    const prodotto = document.getElementById('prodotto').value;
+    const unitaDisplay = document.getElementById('unita-display');
+    const lottiContainer = document.getElementById('lotti-esistenti');
+    const listaLotti = document.getElementById('lista-lotti');
+    
+    if (prodotto) {
+        // Aggiorna unità di misura
+        const selectedOption = document.querySelector(`#prodotto option[value="${prodotto}"]`);
+        const unita = selectedOption.textContent.match(/\(([^)]+)\)/)[1];
+        unitaDisplay.textContent = `Inserisci la quantità in ${unita}`;
+        
+        // Carica lotti esistenti
+        fetch(`/api/lotti/${encodeURIComponent(prodotto)}`)
+            .then(response => response.json())
+            .then(lotti => {
+                if (Object.keys(lotti).length > 0) {
+                    let html = '<div class="table-responsive"><table class="table table-sm">';
+                    html += '<thead><tr><th>Lotto</th><th>Quantità Attuale</th><th>Data Scadenza</th><th>Azione</th></tr></thead><tbody>';
+                    
+                    for (const [codiceLotto, lotto] of Object.entries(lotti)) {
+                        if (lotto.quantita > 0) {
+                            html += `<tr>
+                                <td><span class="font-monospace">${codiceLotto}</span></td>
+                                <td><span class="badge bg-primary">${lotto.quantita} ${unita}</span></td>
+                                <td>${lotto.data_scadenza}</td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                                            onclick="useLotto('${codiceLotto}', '${lotto.data_scadenza}')">
+                                        <i class="bi bi-arrow-up"></i> Usa questo lotto
+                                    </button>
+                                </td>
+                            </tr>`;
+                        }
+                    }
+                    html += '</tbody></table></div>';
+                    listaLotti.innerHTML = html;
+                    lottiContainer.style.display = 'block';
+                } else {
+                    lottiContainer.style.display = 'none';
+                }
+            });
+    } else {
+        unitaDisplay.textContent = 'Inserisci la quantità';
+        lottiContainer.style.display = 'none';
+    }
+}
+
+function useLotto(codiceLotto, dataScadenza) {
+    document.getElementById('lotto').value = codiceLotto;
+    document.getElementById('data_scadenza').value = dataScadenza;
+}
+
+function generateLotto() {
+    const prodotto = document.getElementById('prodotto').value;
+    if (!prodotto) {
+        alert('Seleziona prima un prodotto');
+        return;
+    }
+    
+    const oggi = new Date();
+    const anno = oggi.getFullYear().toString().substr(-2);
+    const mese = (oggi.getMonth() + 1).toString().padStart(2, '0');
+    const giorno = oggi.getDate().toString().padStart(2, '0');
+    const prefisso = prodotto.substring(0, 3).toUpperCase();
+    
+    const lotto = `${prefisso}-${anno}${mese}${giorno}`;
+    document.getElementById('lotto').value = lotto;
+}
+
+// Imposta data minima per scadenza (oggi)
+document.addEventListener('DOMContentLoaded', function() {
+    const oggi = new Date().toISOString().split('T')[0];
+    document.getElementById('data_scadenza').min = oggi;
+    
+    // Se c'è un prodotto preselezionato, aggiorna i lotti
+    if (document.getElementById('prodotto').value) {
+        updateLotti();
+    }
+});
+</script>
+{% endblock %}

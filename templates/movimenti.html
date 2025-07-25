@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block title %}Storico Movimenti - Gestionale Magazzino Spezie{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="bi bi-clock-history"></i> Storico Movimenti</h2>
+            <div>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-house"></i> Dashboard
+                </a>
+                <button class="btn btn-outline-primary" onclick="exportMovimenti()">
+                    <i class="bi bi-download"></i> Esporta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtri -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-funnel"></i> Filtri</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="filtro-tipo" class="form-label">Tipo Movimento</label>
+                        <select class="form-select" id="filtro-tipo" onchange="applicaFiltri()">
+                            <option value="">Tutti</option>
+                            <option value="carico">Solo Carichi</option>
+                            <option value="scarico">Solo Scarichi</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filtro-prodotto" class="form-label">Prodotto</label>
+                        <select class="form-select" id="filtro-prodotto" onchange="applicaFiltri()">
+                            <option value="">Tutti i prodotti</option>
+                            {% for movimento in movimenti %}
+                            <option value="{{ movimento.prodotto }}">{{ movimento.prodotto }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filtro-data-da" class="form-label">Data Da</label>
+                        <input type="date" class="form-control" id="filtro-data-da" onchange="applicaFiltri()">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filtro-data-a" class="form-label">Data A</label>
+                        <input type="date" class="form-control" id="filtro-data-a" onchange="applicaFiltri()">
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="resetFiltri()">
+                            <i class="bi bi-arrow-clockwise"></i> Reset Filtri
+                        </button>
+                        <span class="text-muted ms-3" id="contatore-risultati">
+                            Visualizzati: <span id="movimenti-visibili">{{ movimenti|length }}</span> di {{ movimenti|length }} movimenti
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistiche rapide -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h4>
+                    {% set carichi = movimenti | selectattr('tipo', 'equalto', 'carico') | list %}
+                    {{ carichi | length }}
+                </h4>
+                <p class="mb-0">Carichi Totali</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body text-center">
+                <h4>
+                    {% set scarichi = movimenti | selectattr('tipo', 'equalto', 'scarico') | list %}
+                    {{ scarichi | length }}
+                </h4>
+                <p class="mb-0">Scarichi Totali</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h4>
+                    {% set oggi = '2024-01-01' %}
+                    {% set movimenti_oggi = movimenti | selectattr('timestamp', 'contains', oggi) | list %}
+                    {{ movimenti_oggi | length }}
+                </h4>
+                <p class="mb-0">Movimenti Oggi</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h4>
+                    {% set prodotti_unici = movimenti | map(attribute='prodotto') | unique | list %}
+                    {{ prodotti_unici | length }}
+                </h4>
+                <p class="mb-0">Prodotti Coinvolti</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabella movimenti -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-table"></i> Lista Movimenti</h5>
+            </div>
+            <div class="card-body">
+                {% if movimenti %}
+                <div class="table-responsive">
+                    <table class="table table-hover" id="tabella-movimenti">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Data/Ora</th>
+                                <th>Tipo</th>
+                                <th>Prodotto</th>
+                                <th>Lotto</th>
+                                <th>Quantità</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for movimento in movimenti %}
+                            <tr class="movimento-row" 
+                                data-tipo="{{ movimento.tipo }}" 
+                                data-prodotto="{{ movimento.prodotto }}"
+                                data-data="{{ movimento.timestamp[:10] }}">
+                                <td>
+                                    <div>
+                                        <strong>{{ movimento.timestamp[:10] }}</strong><br>
+                                        <small class="text-muted">{{ movimento.timestamp[11:19] }}</small>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if movimento.tipo == 'carico' %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-arrow-down"></i> Carico
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-warning">
+                                        <i class="bi bi-arrow-up"></i> Scarico
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong>{{ movimento.prodotto }}</strong>
+                                </td>
+                                <td>
+                                    <span class="font-monospace badge bg-light text-dark">
+                                        {{ movimento.lotto }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if movimento.tipo == 'carico' %}success{% else %}warning{% endif %} fs-6">
+                                        {% if movimento.tipo == 'carico' %}+{% else %}-{% endif %}{{ movimento.quantita }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if movimento.note %}
+                                    <small>{{ movimento.note }}</small>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-clock-history display-1 text-muted"></i>
+                    <h3 class="mt-3 text-muted">Nessun movimento registrato</h3>
+                    <p class="text-muted">I movimenti di carico e scarico appariranno qui</p>
+                    <a href="{{ url_for('carico') }}" class="btn btn-success me-2">
+                        <i class="bi bi-plus"></i> Primo Carico
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Riepilogo per prodotto -->
+{% if movimenti %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-pie-chart"></i> Riepilogo per Prodotto</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Prodotto</th>
+                                <th>Carichi</th>
+                                <th>Scarichi</th>
+                                <th>Movimento Netto</th>
+                                <th>Ultimo Movimento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set prodotti_stats = {} %}
+                            {% for movimento in movimenti %}
+                                {% if movimento.prodotto not in prodotti_stats %}
+                                    {% set _ = prodotti_stats.update({movimento.prodotto: {
+                                        'carichi': 0,
+                                        'scarichi': 0,
+                                        'carico_totale': 0,
+                                        'scarico_totale': 0,
+                                        'ultimo_movimento': movimento.timestamp
+                                    }}) %}
+                                {% endif %}
+                                {% if movimento.tipo == 'carico' %}
+                                    {% set _ = prodotti_stats[movimento.prodotto].update({
+                                        'carichi': prodotti_stats[movimento.prodotto]['carichi'] + 1,
+                                        'carico_totale': prodotti_stats[movimento.prodotto]['carico_totale'] + movimento.quantita
+                                    }) %}
+                                {% else %}
+                                    {% set _ = prodotti_stats[movimento.prodotto].update({
+                                        'scarichi': prodotti_stats[movimento.prodotto]['scarichi'] + 1,
+                                        'scarico_totale': prodotti_stats[movimento.prodotto]['scarico_totale'] + movimento.quantita
+                                    }) %}
+                                {% endif %}
+                                {% if movimento.timestamp > prodotti_stats[movimento.prodotto]['ultimo_movimento'] %}
+                                    {% set _ = prodotti_stats[movimento.prodotto].update({'ultimo_movimento': movimento.timestamp}) %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% for prodotto, stats in prodotti_stats.items() %}
+                            <tr>
+                                <td><strong>{{ prodotto }}</strong></td>
+                                <td>
+                                    <span class="badge bg-success">{{ stats.carichi }}</span>
+                                    <small class="text-muted">(+{{ stats.carico_totale }})</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-warning">{{ stats.scarichi }}</span>
+                                    <small class="text-muted">(-{{ stats.scarico_totale }})</small>
+                                </td>
+                                <td>
+                                    {% set netto = stats.carico_totale - stats.scarico_totale %}
+                                    <span class="badge bg-{% if netto > 0 %}success{% elif netto < 0 %}danger{% else %}secondary{% endif %}">
+                                        {{ netto }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>{{ stats.ultimo_movimento[:10] }} {{ stats.ultimo_movimento[11:19] }}</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applicaFiltri() {
+    const filtroTipo = document.getElementById('filtro-tipo').value;
+    const filtroProdotto = document.getElementById('filtro-prodotto').value;
+    const filtroDataDa = document.getElementById('filtro-data-da').value;
+    const filtroDataA = document.getElementById('filtro-data-a').value;
+    
+    const righe = document.querySelectorAll('.movimento-row');
+    let movimentiVisibili = 0;
+    
+    righe.forEach(riga => {
+        let mostra = true;
+        
+        // Filtro tipo
+        if (filtroTipo && riga.dataset.tipo !== filtroTipo) {
+            mostra = false;
+        }
+        
+        // Filtro prodotto
+        if (filtroProdotto && riga.dataset.prodotto !== filtroProdotto) {
+            mostra = false;
+        }
+        
+        // Filtro data da
+        if (filtroDataDa && riga.dataset.data < filtroDataDa) {
+            mostra = false;
+        }
+        
+        // Filtro data a
+        if (filtroDataA && riga.dataset.data > filtroDataA) {
+            mostra = false;
+        }
+        
+        if (mostra) {
+            riga.style.display = '';
+            movimentiVisibili++;
+        } else {
+            riga.style.display = 'none';
+        }
+    });
+    
+    document.getElementById('movimenti-visibili').textContent = movimentiVisibili;
+}
+
+function resetFiltri() {
+    document.getElementById('filtro-tipo').value = '';
+    document.getElementById('filtro-prodotto').value = '';
+    document.getElementById('filtro-data-da').value = '';
+    document.getElementById('filtro-data-a').value = '';
+    applicaFiltri();
+}
+
+function exportMovimenti() {
+    // Semplice esportazione CSV
+    const righe = document.querySelectorAll('.movimento-row:not([style*="display: none"])');
+    let csv = 'Data,Ora,Tipo,Prodotto,Lotto,Quantità,Note\n';
+    
+    righe.forEach(riga => {
+        const celle = riga.querySelectorAll('td');
+        const data = celle[0].querySelector('strong').textContent;
+        const ora = celle[0].querySelector('small').textContent;
+        const tipo = celle[1].textContent.trim();
+        const prodotto = celle[2].textContent.trim();
+        const lotto = celle[3].textContent.trim();
+        const quantita = celle[4].textContent.trim();
+        const note = celle[5].textContent.trim();
+        
+        csv += `"${data}","${ora}","${tipo}","${prodotto}","${lotto}","${quantita}","${note}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `movimenti_magazzino_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+// Rimuovi duplicati dal select prodotti
+document.addEventListener('DOMContentLoaded', function() {
+    const selectProdotto = document.getElementById('filtro-prodotto');
+    const prodotti = new Set();
+    const options = Array.from(selectProdotto.options);
+    
+    // Mantieni solo il primo option (Tutti i prodotti)
+    selectProdotto.innerHTML = '<option value="">Tutti i prodotti</option>';
+    
+    options.forEach(option => {
+        if (option.value && !prodotti.has(option.value)) {
+            prodotti.add(option.value);
+            selectProdotto.appendChild(option.cloneNode(true));
+        }
+    });
+});
+</script>
+{% endblock %}
